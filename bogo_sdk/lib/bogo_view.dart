@@ -1,7 +1,7 @@
 import 'dart:developer' as console;
 
 import 'package:bogo_sdk/shop.dart';
-import 'package:bogo_sdk/webviewManager.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -19,7 +19,7 @@ class BogoView extends StatefulWidget {
 class _BogoViewState extends State<BogoView> {
   InAppWebViewController? _controller;
   bool _navigating = false;
-
+  String? _cachedToken;
   Future<void> requestPermissions() async {
     await Permission.camera.request();
     await Permission.microphone.request();
@@ -33,6 +33,8 @@ class _BogoViewState extends State<BogoView> {
     loadFresh();
   }
 
+
+
   Future<void> loadFresh() async {
     final version = DateTime.now().millisecondsSinceEpoch;
 
@@ -43,12 +45,7 @@ class _BogoViewState extends State<BogoView> {
 
     await _controller?.loadUrl(
       urlRequest: URLRequest(
-        url: WebUri("http://192.168.18.115:8080"),
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-          }
+        url: WebUri("https://bogo-staging-11e83.web.app/"),
       ),
     );
   }
@@ -127,8 +124,10 @@ class _BogoViewState extends State<BogoView> {
           //   url: WebUri("https://bogo-staging-11e83.web.app/"),
           // ),
           initialSettings: InAppWebViewSettings(
-            cacheEnabled: false,
-            clearCache: true,
+            useHybridComposition: true,
+            hardwareAcceleration: true,
+            // cacheEnabled: false,
+            // clearCache: true,
             mediaPlaybackRequiresUserGesture: false,
             sharedCookiesEnabled: true,
             javaScriptEnabled: true,
@@ -157,7 +156,26 @@ class _BogoViewState extends State<BogoView> {
           },
 
           onLoadStop: (controller, url) async {
+            try{
+              console.log("seeeeeeeee token work below");
+              _cachedToken??=  await FirebaseAppCheck.instance.getToken();
+              print("seeeeeeeeeeee token 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥$_cachedToken");
+              if(_cachedToken!=null){
+                await controller.evaluateJavascript(source: """
+            window.appCheckToken='$_cachedToken';
+            localStorage.setItem('appCheckToken','$_cachedToken');
+            console.log("🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥Token secured");
+            
+            """);
+              }
+            }catch(e){
+              if(e.toString().contains("too-many-attempts")){
+                print("CRITICAL: App Check throttled. Wait a few minutes before retrying");
+              }
+              print("Exception seee 🔥🔥🔥$e");
+            }
             // await Future.delayed(Duration(milliseconds: 600));
+
             await controller.evaluateJavascript(
               source: """
           window.addEventListener('bogo-restart-web', function() {
@@ -176,7 +194,7 @@ class _BogoViewState extends State<BogoView> {
               source: """
     const ALLOWED_ORIGIN =[ "https://bogo-staging-11e83.web.app",
     "https://bogo-staging-11e83.firebaseapp.com"];
-    const SECRET_KEY = "djxj67-sh72!@yjehu#";
+    const SECRET_KEY = 'djxj67-sh72!@yjehu#';
 
     window.addEventListener("message", (event) => {
 

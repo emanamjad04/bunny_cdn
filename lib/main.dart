@@ -1,4 +1,5 @@
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:bogo_sdk/bogo_sdk.dart';
 import 'package:bunny_cdn/pipProvider.dart';
 import 'package:bunny_cdn/zongapp.dart';
 import 'package:flutter/material.dart';
@@ -9,9 +10,10 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
-void main()  {
+void main()  async{
+  WidgetsFlutterBinding.ensureInitialized();
   requestPermissions();
-
+  await BogoSDK.initialize();
   runApp(
     MultiProvider(
       providers: [
