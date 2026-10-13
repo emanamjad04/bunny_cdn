@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:developer' as console;
 
 import 'package:bogo_sdk/shop.dart';
@@ -9,17 +12,21 @@ import 'package:permission_handler/permission_handler.dart';
 class BogoView extends StatefulWidget {
   final String email;
   final String password;
+  final String token;
 
-  const BogoView({required this.email, required this.password, super.key});
+  const BogoView({required this.email, required this.password, super.key, this.token = ''});
 
   @override
   State<BogoView> createState() => _BogoViewState();
 }
 
 class _BogoViewState extends State<BogoView> {
+  Timer? _authInjectTimer;
+
   InAppWebViewController? _controller;
   bool _navigating = false;
   String? _cachedToken;
+  String token = '';
   Future<void> requestPermissions() async {
     await Permission.camera.request();
     await Permission.microphone.request();
@@ -45,13 +52,16 @@ class _BogoViewState extends State<BogoView> {
 
     await _controller?.loadUrl(
       urlRequest: URLRequest(
-        url: WebUri("https://bogo-staging-11e83.web.app/"),
+        // url: WebUri("https://bogo-staging-11e83.web.app/?sdk=zong"),
+        url: WebUri("https://bogo-staging-11e83.web.app/onboardingScreen?sdk=zong"),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final authJson = jsonEncode({'token': widget.token}); // token only, no password
+
     return Scaffold(
       // appBar:back? AppBar(
       //   leading: IconButton(onPressed: (){
@@ -74,19 +84,16 @@ class _BogoViewState extends State<BogoView> {
 
           onWebViewCreated: (controller) async {
 
-            // _controller=controller;
-            // if(!WebViewManager.instance.initialized){
-            //   WebViewManager.instance.controller=controller;
-            //   WebViewManager.instance.initialized=true;
-            //
-            //   await controller.loadUrl(
-            //       urlRequest:URLRequest(
-            //           url: WebUri("https://bogo-staging-11e83.web.app/")
-            //       ),
-            // );
-            // }
             _controller = controller;
-            // _alreadyLoggedIn = !_alreadyLoggedIn;
+
+            controller.addJavaScriptHandler(
+              handlerName: 'getBogoAuth',
+              callback: (_) {
+                debugPrint('getBogoAuth: Token $token');
+                return {'token': widget.token};
+              },
+            );
+
             controller?.addJavaScriptHandler(
               handlerName: 'bogoRestartListener',
               callback: (args) async {
@@ -135,6 +142,13 @@ class _BogoViewState extends State<BogoView> {
             allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
           ),
+          initialUserScripts: UnmodifiableListView([
+            UserScript(
+              source: 'window.__bogoAuthData = $authJson;',
+              injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+              // forMainFrameOnly defaults to true, which is what you want
+            ),
+          ]),
 
           onConsoleMessage: (controller, consoleMessage) {
             print("Console: ${consoleMessage.message}");
@@ -183,45 +197,18 @@ class _BogoViewState extends State<BogoView> {
           });
         """,
             );
+            ///don't call at load stop it creates race condition
             await controller.evaluateJavascript(
               source: """
+                  console.log("🔥🔥🔥 ABOUT TO SEND BOGO AUTH");
+
               window.dispatchEvent(new CustomEvent('bogo-auth', {
-                detail: { email: '${widget.email}', password: '${widget.password}' }
+                detail: { email: '${widget.email}', password: '${widget.password}', token: '${jsonEncode(widget.token)}'}
               }));
+
+                  console.log("🔥🔥🔥 BOGO AUTH SENT");
+
             """,
-            );
-            await controller.evaluateJavascript(
-              source: """
-    const ALLOWED_ORIGIN =[ "https://bogo-staging-11e83.web.app",
-    "https://bogo-staging-11e83.firebaseapp.com"];
-    const SECRET_KEY = 'djxj67-sh72!@yjehu#';
-
-    window.addEventListener("message", (event) => {
-
-      console.log("🔥 Incoming message from:", event.origin);
-      console.log("🔥 Allowed Origin:", ALLOWED_ORIGIN);
-      console.log("🔥see event:", event.data);
-      if (!ALLOWED_ORIGIN.includes(event.origin)) {
-        console.log("⛔ Blocked: Invalid origin");
-        return;
-      }
-
-      if (!event.data || event.data.secret !== SECRET_KEY) {
-        console.log("⛔ Blocked: Invalid secret");
-        return;
-      }
-      console.log("🔥🔥🔥🔥🔥Secret key is validd");
-      if (event.data.openUrl) {
-        window.flutter_inappwebview.callHandler(
-          'openExternalUrl',
-          event.data.openUrl,
-          event.data.code,
-          event.data.title,
-          event.data.logoUrl
-        );
-      }
-    });
-  """,
             );
 
           },
