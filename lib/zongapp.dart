@@ -37,7 +37,11 @@ class _ZongAppState extends State<ZongApp> {
           Navigator.pop(context);
         }, icon: Icon(Icons.close)),
       ),
-      body: BogoView(email: "x5@bogo.com", password: "00000000"),
+      body: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
+        // child: BogoView(email: "x5@bogo.com", password: "00000000"),
+        child: BogoView(email: "zong7@rt.com", password: "12345678", token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjo0OTc0ODMsImlzRW1haWxWZXJpZmllZCI6ZmFsc2UsImlzUGhvbmVWZXJpZmllZCI6dHJ1ZSwic2Vzc2lvbiI6IjE3OTE5NTczNzg2NTgiLCJkZXZpY2VJZCI6bnVsbH0sImlhdCI6MTc5MTk1NzM3OCwiZXhwIjoxNzkyMDExMzc4fQ.9ln8U_1xUd_ojxFAm5fuF_9QOqiBwV7104K3SQyPg9Q',),
+      ),
     );
   }
 }
