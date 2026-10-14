@@ -8,6 +8,7 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BogoView extends StatefulWidget {
   final String email;
@@ -27,6 +28,11 @@ class _BogoViewState extends State<BogoView> {
   bool _navigating = false;
   String? _cachedToken;
   String token = '';
+  static const _appHosts = {
+    'bogo-staging-11e83.web.app',
+    'bogo-staging-11e83.firebaseapp.com',
+  };
+
   Future<void> requestPermissions() async {
     await Permission.camera.request();
     await Permission.microphone.request();
@@ -141,6 +147,7 @@ class _BogoViewState extends State<BogoView> {
             javaScriptCanOpenWindowsAutomatically: true,
             allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
+            useShouldOverrideUrlLoading: true,
           ),
           initialUserScripts: UnmodifiableListView([
             UserScript(
@@ -152,6 +159,31 @@ class _BogoViewState extends State<BogoView> {
 
           onConsoleMessage: (controller, consoleMessage) {
             print("Console: ${consoleMessage.message}");
+          },
+
+          shouldOverrideUrlLoading: (controller, action) async {
+            final uri = action.request.url;
+            debugPrint('🔗 nav request: $uri (mainFrame: ${action.isForMainFrame})');
+            if (uri == null) return NavigationActionPolicy.ALLOW;
+
+            const internalSchemes = {'about', 'blob', 'data', 'javascript'};
+            final isWeb = uri.scheme == 'http' || uri.scheme == 'https';
+
+            if (internalSchemes.contains(uri.scheme) ||
+                (isWeb && _appHosts.contains(uri.host))) {
+              return NavigationActionPolicy.ALLOW;
+            }
+
+            // Don't gate on isForMainFrame here: popup/_blank navigations
+            // can be reported as non-main-frame on some Android versions.
+            try {
+              final ok = await launchUrl(Uri.parse(uri.toString()),
+                  mode: LaunchMode.externalApplication);
+              debugPrint('🔗 external launch result: $ok');
+            } catch (e) {
+              debugPrint('🔗 external launch failed: $e');
+            }
+            return NavigationActionPolicy.CANCEL;
           },
 
           onPermissionRequest: (controller, request) async {
