@@ -10,6 +10,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
+import 'InputScreen.dart';
+
 void main()  async{
   WidgetsFlutterBinding.ensureInitialized();
   requestPermissions();
@@ -237,7 +239,7 @@ class _BunnyPlayerWebViewState extends State<BunnyPlayerWebView> {
                         Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => ZongApp()));
+                                builder: (context) => LoginScreen()));
                       },
                       child: Text(
                         "bogo Web View",

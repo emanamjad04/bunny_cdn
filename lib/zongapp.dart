@@ -6,7 +6,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 
 class ZongApp extends StatefulWidget {
-  const ZongApp({super.key});
+  const ZongApp({super.key, required this.token});
+
+  final String token;
 
   @override
   State<ZongApp> createState() => _ZongAppState();
@@ -40,7 +42,7 @@ class _ZongAppState extends State<ZongApp> {
       body: Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
         // child: BogoView(email: "x5@bogo.com", password: "00000000"),
-        child: BogoView(email: "zong7@rt.com", password: "12345678", token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjo0OTc0ODMsImlzRW1haWxWZXJpZmllZCI6ZmFsc2UsImlzUGhvbmVWZXJpZmllZCI6dHJ1ZSwic2Vzc2lvbiI6IjE3OTE5NTczNzg2NTgiLCJkZXZpY2VJZCI6bnVsbH0sImlhdCI6MTc5MTk1NzM3OCwiZXhwIjoxNzkyMDExMzc4fQ.9ln8U_1xUd_ojxFAm5fuF_9QOqiBwV7104K3SQyPg9Q',),
+        child: BogoView(email: "zong7@rt.com", password: "12345678", token: widget.token,),
       ),
     );
   }
