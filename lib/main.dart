@@ -12,27 +12,25 @@ import 'package:provider/provider.dart';
 
 import 'InputScreen.dart';
 
-void main()  async{
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   requestPermissions();
   await BogoSDK.initialize();
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_)=>PipProvider())
-      ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: BunnyPlayerWebView(),
-      ) ,
-    )
-     );
+  runApp(MultiProvider(
+    providers: [ChangeNotifierProvider(create: (_) => PipProvider())],
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BunnyPlayerWebView(),
+    ),
+  ));
 }
+
 Future<void> requestPermissions() async {
   await Permission.camera.request();
   await Permission.microphone.request();
   await Permission.locationWhenInUse.request();
 }
+
 String bunnyEmbedHtmlold(String videoUrl) {
   return '''
 <!DOCTYPE html>
@@ -185,7 +183,7 @@ class _BunnyPlayerWebViewState extends State<BunnyPlayerWebView> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Consumer<PipProvider>(
-          builder: (context, prov, _) =>Container(
+          builder: (context, prov, _) => Container(
             width: double.infinity,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -199,12 +197,12 @@ class _BunnyPlayerWebViewState extends State<BunnyPlayerWebView> {
                   ),
                   child: TextButton(
                       onPressed: () {
-
-                        prov.IsPipVisible?prov.isdispose=true:
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => InappwebView()));
+                        prov.IsPipVisible
+                            ? prov.isdispose = true
+                            : Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) => InappwebView()));
                       },
                       child: Text(
                         "Bunny VideoPlayer",
@@ -218,7 +216,6 @@ class _BunnyPlayerWebViewState extends State<BunnyPlayerWebView> {
                   ),
                   child: TextButton(
                       onPressed: () {
-
                         Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -266,7 +263,7 @@ class InappwebView extends StatefulWidget {
 
 class _InappwebViewState extends State<InappwebView> {
   InAppWebViewController? webViewController;
-  ValueNotifier isShow =ValueNotifier(false);
+  ValueNotifier isShow = ValueNotifier(false);
 
   final String urlString = bunnyEmbedHtml(
       "https://iframe.mediadelivery.net/embed/425272/15c977d5-5132-4dc8-a913-c38b1728a74a"
@@ -281,9 +278,18 @@ class _InappwebViewState extends State<InappwebView> {
   String _progressTrackingJs() {
     return '''
     let lastTime = 0;
-    let player =null;
     const player = new playerjs.Player('bunny-video-player');
-     window.flutter_inappwebview.addJavaScriptHandler('seekVideoHandler', (data) => {
+    const registerSeekHandler = () => {
+      const bridge = window.flutter_inappwebview;
+      if (!bridge || typeof bridge.addJavaScriptHandler !== 'function') {
+        window.addEventListener(
+          'flutterInAppWebViewPlatformReady',
+          registerSeekHandler,
+          { once: true }
+        );
+        return;
+      }
+      bridge.addJavaScriptHandler('seekVideoHandler', (data) => {
           const direction =data[0];
           const seekAmount =data[1];
           
@@ -307,6 +313,8 @@ class _InappwebViewState extends State<InappwebView> {
               player.setCurrentTime(newTime);
               console.log(\`Video seeked \${direction} by \${seekAmount}s to \${newTime}s.\`);
           });
+    };
+    registerSeekHandler();
       });
     player.on('ready', () => {
       console.log('✅ player ready seeeeeee. Registering Handlers.');
@@ -324,11 +332,21 @@ class _InappwebViewState extends State<InappwebView> {
                 
                 console.log('TIME seee:', currentTime);
                 
-                if (window.flutter_inappwebview) {
-                    window.flutter_inappwebview.callHandler(
-                        "saveProgressHandler",
-                        currentTime
-                    );
+                const saveProgress = () => {
+                  const bridge = window.flutter_inappwebview;
+                  if (bridge && typeof bridge.callHandler === 'function') {
+                    bridge.callHandler("saveProgressHandler", currentTime);
+                  }
+                };
+                const bridge = window.flutter_inappwebview;
+                if (bridge && typeof bridge.callHandler === 'function') {
+                  saveProgress();
+                } else {
+                  window.addEventListener(
+                    'flutterInAppWebViewPlatformReady',
+                    saveProgress,
+                    { once: true }
+                  );
                 }
             }
         }
@@ -336,12 +354,29 @@ class _InappwebViewState extends State<InappwebView> {
     });
   ''';
   }
+
   static const int seektime = 10;
   Future<void> _seekVideo(String direction) async {
     if (webViewController != null) {
       await webViewController!.callAsyncJavaScript(
-          functionBody:
-          'window.flutter_inappwebview.callHandler("seekVideoHandler", "$direction", $seektime);'
+        functionBody: '''
+          const invokeSeekHandler = () => {
+            const bridge = window.flutter_inappwebview;
+            if (bridge && typeof bridge.callHandler === 'function') {
+              bridge.callHandler("seekVideoHandler", "$direction", $seektime);
+            }
+          };
+          const bridge = window.flutter_inappwebview;
+          if (bridge && typeof bridge.callHandler === 'function') {
+            invokeSeekHandler();
+          } else {
+            window.addEventListener(
+              'flutterInAppWebViewPlatformReady',
+              invokeSeekHandler,
+              { once: true }
+            );
+          }
+        ''',
       );
     }
   }
@@ -350,136 +385,134 @@ class _InappwebViewState extends State<InappwebView> {
   Widget build(BuildContext context) {
     return Consumer<PipProvider>(
         builder: (context, prov, _) => PIPView(
-              builder: (BuildContext context, bool isFloating)=> Scaffold(
-        backgroundColor: Colors.white,
-        appBar: !isFloating?AppBar(
-          backgroundColor: Colors.green,
-          leading: IconButton(
-            color: Colors.white,
-            onPressed: () {
-              Navigator.pop(context);
-              prov.IsPipVisible=false;
-            },
-            icon: Icon(Icons.arrow_back_ios_rounded),
-          ),
-          title: Text(
-            "Bunny VideoPlayer",
-            style: TextStyle(color: Colors.white, fontSize: 20),
-          ),
-        ):null,
-        body: SafeArea(
-          child:AspectRatio(
-            aspectRatio:16/9,
-            child: Stack(
-
-                children: [
-                  GestureDetector(
-
-                    onDoubleTapDown: (details) {
-                      final double screenWidth = context.size!.width;
-                      final double tapX = details.localPosition.dx;
-
-                      if (tapX < screenWidth / 3) {
-                        _seekVideo("backward");
-                      } else if (tapX > screenWidth * 2 / 3) {
-                        _seekVideo("forward");
-                      }
-                    },
-                    child:
-                       InAppWebView(
-                        initialData: InAppWebViewInitialData(
-                            data:
-                                urlString,
-                            baseUrl: WebUri("https://iframe.mediadelivery.net/")),
-                        // initialUrlRequest: URLRequest(
-                        //     url: WebUri(
-                        //         "https://iframe.mediadelivery.net/embed/425272/d536d078-e1cd-4de5-83f2-526822e2d829"
-                        //         "?autoplay=true"
-                        //         "&loop=false"
-                        //         "&preload=true"
-                        //         "&responsive=true"
-                        //         "&pipEnabled=true"
-                        //         "&showControls=true"
-                        //         "&showSpeed=true"
-                        //         "&skipSeconds=10")),
-                        onWebViewCreated: (controller) {
-                          webViewController = controller;
-                          // The handler receives the time from the JavaScript
-                          controller.addJavaScriptHandler(
-                            handlerName: 'saveProgressHandler',
-                            callback: (args) async {
-                              if (args.isNotEmpty && args[0] is int) {
-                                final int currentTime = args[0];
-
-                                // Replace with your actual user ID and video ID logic
-                                final String userId = 'current_user_id';
-                                final String videoId = 'current_video_id';
-
-                                // 2. Save the progress to your database
-                                // await saveUserProgress(userId, videoId, currentTime);
-                                print(
-                                    'Saved progress for $userId on video $videoId at $currentTime seconds');
-                              }
-                            },
-                          );
-                        },
-
-                        onLoadStop: (controller, url) {
-
-                          controller.evaluateJavascript(
-                              source: _progressTrackingJs());
-                        },
-
-                        onConsoleMessage: (controller, consoleMessage) {
-                          print("JS consoleeeeeeeeeeee: ${consoleMessage.message}");
-                        },
-                        initialSettings: InAppWebViewSettings(
-                          javaScriptEnabled: true,
-                          javaScriptCanOpenWindowsAutomatically: true,
-                          allowFileAccessFromFileURLs: true,
-                          allowUniversalAccessFromFileURLs: true,
-                          mediaPlaybackRequiresUserGesture: false,
-                          allowsInlineMediaPlayback: true,
-                          allowsPictureInPictureMediaPlayback: true,
-                          allowBackgroundAudioPlaying:
-                              true, //todo controls in notification
+              builder: (BuildContext context, bool isFloating) => Scaffold(
+                backgroundColor: Colors.white,
+                appBar: !isFloating
+                    ? AppBar(
+                        backgroundColor: Colors.green,
+                        leading: IconButton(
+                          color: Colors.white,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            prov.IsPipVisible = false;
+                          },
+                          icon: Icon(Icons.arrow_back_ios_rounded),
                         ),
-                        initialOptions: InAppWebViewGroupOptions(
-                            // crossPlatform: InAppWebViewOptions(
-                            //   mediaPlaybackRequiresUserGesture: false,
-                            //   supportZoom: false,
-                            //
-                            // ),
+                        title: Text(
+                          "Bunny VideoPlayer",
+                          style: TextStyle(color: Colors.white, fontSize: 20),
+                        ),
+                      )
+                    : null,
+                body: SafeArea(
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Stack(
+                      children: [
+                        GestureDetector(
+                          onDoubleTapDown: (details) {
+                            final double screenWidth = context.size!.width;
+                            final double tapX = details.localPosition.dx;
 
-                            android: AndroidInAppWebViewOptions(
-                              supportMultipleWindows: true,
+                            if (tapX < screenWidth / 3) {
+                              _seekVideo("backward");
+                            } else if (tapX > screenWidth * 2 / 3) {
+                              _seekVideo("forward");
+                            }
+                          },
+                          child: InAppWebView(
+                            initialData: InAppWebViewInitialData(
+                                data: urlString,
+                                baseUrl: WebUri(
+                                    "https://iframe.mediadelivery.net/")),
+                            // initialUrlRequest: URLRequest(
+                            //     url: WebUri(
+                            //         "https://iframe.mediadelivery.net/embed/425272/d536d078-e1cd-4de5-83f2-526822e2d829"
+                            //         "?autoplay=true"
+                            //         "&loop=false"
+                            //         "&preload=true"
+                            //         "&responsive=true"
+                            //         "&pipEnabled=true"
+                            //         "&showControls=true"
+                            //         "&showSpeed=true"
+                            //         "&skipSeconds=10")),
+                            onWebViewCreated: (controller) {
+                              webViewController = controller;
+                              // The handler receives the time from the JavaScript
+                              controller.addJavaScriptHandler(
+                                handlerName: 'saveProgressHandler',
+                                callback: (args) async {
+                                  if (args.isNotEmpty && args[0] is int) {
+                                    final int currentTime = args[0];
+
+                                    // Replace with your actual user ID and video ID logic
+                                    final String userId = 'current_user_id';
+                                    final String videoId = 'current_video_id';
+
+                                    // 2. Save the progress to your database
+                                    // await saveUserProgress(userId, videoId, currentTime);
+                                    print(
+                                        'Saved progress for $userId on video $videoId at $currentTime seconds');
+                                  }
+                                },
+                              );
+                            },
+
+                            onLoadStop: (controller, url) {
+                              controller.evaluateJavascript(
+                                  source: _progressTrackingJs());
+                            },
+
+                            onConsoleMessage: (controller, consoleMessage) {
+                              print(
+                                  "JS consoleeeeeeeeeeee: ${consoleMessage.message}");
+                            },
+                            initialSettings: InAppWebViewSettings(
+                              javaScriptEnabled: true,
+                              javaScriptCanOpenWindowsAutomatically: true,
+                              allowFileAccessFromFileURLs: true,
+                              allowUniversalAccessFromFileURLs: true,
+                              mediaPlaybackRequiresUserGesture: false,
+                              allowsInlineMediaPlayback: true,
+                              allowsPictureInPictureMediaPlayback: true,
+                              allowBackgroundAudioPlaying:
+                                  true, //todo controls in notification
                             ),
-                            ios: IOSInAppWebViewOptions()),
-                      ),
+                            initialOptions: InAppWebViewGroupOptions(
+                                // crossPlatform: InAppWebViewOptions(
+                                //   mediaPlaybackRequiresUserGesture: false,
+                                //   supportZoom: false,
+                                //
+                                // ),
 
-                  ),
-                  Positioned(
-                    top: 1,
-                    right: 1,
-                    child: IconButton(
-                      onPressed: () {
-                        prov.IsPipVisible=true;
-                        // prov.isdispose?PIPView.of(context)?.dispose():
-                        PIPView.of(context)?.presentBelow(BunnyPlayerWebView());
-                        prov.isdispose=false;
-                      },
-                      icon: Icon(Icons.picture_in_picture_alt,
-                      color: Colors.white,
-                        size: 20,
-                      ),
+                                android: AndroidInAppWebViewOptions(
+                                  supportMultipleWindows: true,
+                                ),
+                                ios: IOSInAppWebViewOptions()),
+                          ),
+                        ),
+                        Positioned(
+                          top: 1,
+                          right: 1,
+                          child: IconButton(
+                            onPressed: () {
+                              prov.IsPipVisible = true;
+                              // prov.isdispose?PIPView.of(context)?.dispose():
+                              PIPView.of(context)
+                                  ?.presentBelow(BunnyPlayerWebView());
+                              prov.isdispose = false;
+                            },
+                            icon: Icon(
+                              Icons.picture_in_picture_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-          ),
-
-
-        ),
+                ),
               ),
             ));
   }
@@ -605,11 +638,6 @@ class _BunnyBetterPlayerState extends State<BunnyBetterPlayer> {
       BetterPlayerDataSourceType.network,
       "https://vz-f4ad5737-e92.b-cdn.net/15c977d5-5132-4dc8-a913-c38b1728a74a/playlist.m3u8",
       videoFormat: BetterPlayerVideoFormat.hls,
-
-      // subtitles: BetterPlayerSubtitlesSource.single(
-      //   type: BetterPlayerSubtitlesSourceType.network,
-      //   url: "https://vz-5e491292-574.b-cdn.net/3d5a3ca0-fed6-455c-91e0-678f7381c497/subtitle.vtt",
-      // ),
       useAsmsSubtitles: true,
       useAsmsTracks: true,
     );
@@ -620,32 +648,13 @@ class _BunnyBetterPlayerState extends State<BunnyBetterPlayer> {
         autoPlay: true,
         handleLifecycle: true,
         allowedScreenSleep: false,
-
         controlsConfiguration: BetterPlayerControlsConfiguration(
-          // customControlsBuilder: (controller, onPlayerVisibilityChanged) {
-          //   return BetterPlayerMaterialControls(
-          //     showControls: true,
-          //     playbackSpeeds: [0.5, 1.0, 1.5], // <-- only these options
-          //     playbackSpeedTextStyle: TextStyle(
-          //       color: Colors.red, // change text color
-          //       fontSize: 16,
-          //       fontWeight: FontWeight.bold,
-          //     ),
-          //   );
-          //
-          //   },
-          // overflowMenuCustomItems: chapters.map((chapter) {
-          //   return BetterPlayerOverflowMenuItem(Icons.import_contacts, chapter['title'], (){
-          //     _betterPlayerController.seekTo(chapter["start"]);
-          //
-          //   });
-          // }).toList(),
             iconsColor: Color(0xFFF5F5F5),
-            textColor:Color(0xFFF5F5F5),
+            textColor: Color(0xFFF5F5F5),
             progressBarPlayedColor: Colors.red,
-            progressBarHandleColor:Color(0xFFF5F5F5),
+            progressBarHandleColor: Color(0xFFF5F5F5),
             progressBarBufferedColor: Colors.grey,
-            progressBarBackgroundColor:Color(0xFFF5F5F5),
+            progressBarBackgroundColor: Color(0xFFF5F5F5),
             enablePlaybackSpeed: true,
             enableSubtitles: true,
             enableSkips: true,
@@ -689,14 +698,17 @@ class _BunnyBetterPlayerState extends State<BunnyBetterPlayer> {
   }
 
   void seekForward() {
-    final current = _betterPlayerController.videoPlayerController!.value.position;
+    final current =
+        _betterPlayerController.videoPlayerController!.value.position;
     _betterPlayerController.seekTo(current + Duration(seconds: 10));
   }
 
   void seekBackward() {
-    final current = _betterPlayerController.videoPlayerController!.value.position;
+    final current =
+        _betterPlayerController.videoPlayerController!.value.position;
     _betterPlayerController.seekTo(current - Duration(seconds: 10));
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -718,7 +730,6 @@ class _BunnyBetterPlayerState extends State<BunnyBetterPlayer> {
       body: SafeArea(
           child: Stack(
         children: [
-
           AspectRatio(
             aspectRatio: 16 / 9,
             child: GestureDetector(
@@ -738,8 +749,7 @@ class _BunnyBetterPlayerState extends State<BunnyBetterPlayer> {
               ),
             ),
           ),
-
-        ValueListenableBuilder<bool>(
+          ValueListenableBuilder<bool>(
             valueListenable: _showPiPButton,
             builder: (context, visible, _) {
               return visible
@@ -760,6 +770,3 @@ class _BunnyBetterPlayerState extends State<BunnyBetterPlayer> {
     );
   }
 }
-
-
-
