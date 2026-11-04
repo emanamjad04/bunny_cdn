@@ -1,7 +1,6 @@
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:bogo_sdk/bogo_sdk.dart';
 import 'package:bunny_cdn/pipProvider.dart';
-import 'package:bunny_cdn/zongapp.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -15,7 +14,7 @@ import 'InputScreen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   requestPermissions();
-  await BogoSDK.initialize();
+  await BogoSdk.initialize(BogoEnvironment.staging);
   runApp(MultiProvider(
     providers: [ChangeNotifierProvider(create: (_) => PipProvider())],
     child: MaterialApp(
@@ -277,8 +276,37 @@ class _InappwebViewState extends State<InappwebView> {
 // Helper function to define the JS injection
   String _progressTrackingJs() {
     return '''
+    // WEBVIEW-FIX: Gate host callbacks on the WebView bridge being callable.
     let lastTime = 0;
+    let pendingProgress;
+    let waitingForBridgeReady = false;
     const player = new playerjs.Player('bunny-video-player');
+    const saveProgress = (currentTime) => {
+      if (typeof window.flutter_inappwebview?.callHandler === 'function') {
+        pendingProgress = undefined;
+        window.flutter_inappwebview.callHandler("saveProgressHandler", currentTime);
+        return;
+      }
+
+      pendingProgress = currentTime;
+      if (waitingForBridgeReady) return;
+
+      waitingForBridgeReady = true;
+      window.addEventListener(
+        'flutterInAppWebViewPlatformReady',
+        () => {
+          waitingForBridgeReady = false;
+          if (pendingProgress === undefined ||
+              typeof window.flutter_inappwebview?.callHandler !== 'function') {
+            return;
+          }
+          const progress = pendingProgress;
+          pendingProgress = undefined;
+          window.flutter_inappwebview.callHandler("saveProgressHandler", progress);
+        },
+        { once: true }
+      );
+    };
     const registerSeekHandler = () => {
       const bridge = window.flutter_inappwebview;
       if (!bridge || typeof bridge.addJavaScriptHandler !== 'function') {
@@ -332,22 +360,7 @@ class _InappwebViewState extends State<InappwebView> {
                 
                 console.log('TIME seee:', currentTime);
                 
-                const saveProgress = () => {
-                  const bridge = window.flutter_inappwebview;
-                  if (bridge && typeof bridge.callHandler === 'function') {
-                    bridge.callHandler("saveProgressHandler", currentTime);
-                  }
-                };
-                const bridge = window.flutter_inappwebview;
-                if (bridge && typeof bridge.callHandler === 'function') {
-                  saveProgress();
-                } else {
-                  window.addEventListener(
-                    'flutterInAppWebViewPlatformReady',
-                    saveProgress,
-                    { once: true }
-                  );
-                }
+                saveProgress(currentTime);
             }
         }
       });
@@ -360,14 +373,13 @@ class _InappwebViewState extends State<InappwebView> {
     if (webViewController != null) {
       await webViewController!.callAsyncJavaScript(
         functionBody: '''
+          // WEBVIEW-FIX: Wait for a callable host bridge before sending seek events.
           const invokeSeekHandler = () => {
-            const bridge = window.flutter_inappwebview;
-            if (bridge && typeof bridge.callHandler === 'function') {
-              bridge.callHandler("seekVideoHandler", "$direction", $seektime);
+            if (typeof window.flutter_inappwebview?.callHandler === 'function') {
+              window.flutter_inappwebview.callHandler("seekVideoHandler", "$direction", $seektime);
             }
           };
-          const bridge = window.flutter_inappwebview;
-          if (bridge && typeof bridge.callHandler === 'function') {
+          if (typeof window.flutter_inappwebview?.callHandler === 'function') {
             invokeSeekHandler();
           } else {
             window.addEventListener(
