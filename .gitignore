@@ -45,4 +45,4 @@ app.*.map.json
 /android/app/release
 
 lib/local_config.dart
-
+lib/sdk_keys/

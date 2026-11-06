@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import 'local_config.dart';
+import 'mock_partner_backend.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,13 +13,16 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final MockPartnerBackend _partnerBackend = MockPartnerBackend();
+  late bool _useSdkAuth = LocalConfig.useSdkAuth;
   String? _token;
   bool _isLoading = false;
   String? _lastError;
 
   Future<String> _login() async {
-    // TODO(one-time-token): Replace the temporary BOGO login with partner
-    // one-time-token issuance when the backend flow is available.
+    if (_useSdkAuth) {
+      return _partnerBackend.requestSdkToken();
+    }
     final response = await Dio().post(
       '${LocalConfig.loginBaseUrl}/api/auth/login',
       data: {
@@ -81,6 +85,15 @@ class _LoginScreenState extends State<LoginScreen> {
               FilledButton(
                 onPressed: _isLoading ? null : _signIn,
                 child: Text(_isLoading ? 'Signing in...' : 'Partner test login'),
+              ),
+              SwitchListTile(
+                title: const Text('Use new SDK auth flow'),
+                value: _useSdkAuth,
+                onChanged: (value) => setState(() {
+                  _useSdkAuth = value;
+                  _token = null;
+                  _lastError = null;
+                }),
               ),
               const SizedBox(height: 12),
               FilledButton(
